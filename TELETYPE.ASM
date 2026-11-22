@@ -1,10 +1,12 @@
-; TELETYPE/CMD v1.1 - TRS-80 Model III native Z80 teletype
+; TELETYPE/CMD v1.3 - TRS-80 Model III native Z80 teletype
 ; TRSDOS/LDOS command file; 48K Model III, RS-232 option.
 ; Origin 7000h keeps clear of TRSDOS library command overlays.
 ; No BASIC or memory-size reservation required.
-; Full-width paper: 64 columns, rows 0..14; printhead on row 15.
+; 80-character logical lines on 64-column screen; row 15 printhead.
 ; Local screen-test mode has no artificial baud-rate delays.
-; Ctrl-] (1Dh) exits to DOS READY. Real serial expects remote echo.
+; Ctrl-] quits. Full duplex=remote echo; half duplex=local echo.
+; Bell once on logical character 80, then automatic paper feed.
+; Bell generated via Model III cassette output port FFh; needs audio monitoring.
 
         ORG     7000H
 
@@ -66,14 +68,47 @@ BAUD_KEY:
         CP      '2'
         JR      Z,BAUD_300
         CP      '1'
-        JR      Z,SERIAL_SELECTED
+        JR      Z,DUPLEX_MENU
         CP      0DH
         JR      NZ,BAUD_KEY
-        JR      SERIAL_SELECTED
+        JR      DUPLEX_MENU
 
 BAUD_300:
         LD      A,055H          ; Model III 300 baud both ways
         LD      (BAUD),A
+
+; Duplex selection is serial-only.  Full = remote echo, half = local.
+DUPLEX_MENU:
+        XOR     A
+        LD      (DUPLEX),A     ; full duplex is default
+        CALL    01C9H
+        LD      HL,MSG_TITLE
+        LD      DE,3C40H
+        CALL    PRINT_AT
+        LD      HL,MSG_DUPLEX
+        LD      DE,3CC0H
+        CALL    PRINT_AT
+        LD      HL,MSG_FULL
+        LD      DE,3D40H
+        CALL    PRINT_AT
+        LD      HL,MSG_HALF
+        LD      DE,3D80H
+        CALL    PRINT_AT
+        LD      HL,MSG_CHOOSE
+        LD      DE,3E00H
+        CALL    PRINT_AT
+DUPLEX_KEY:
+        CALL    0049H
+        CP      '2'
+        JR      Z,SET_HALF
+        CP      '1'
+        JR      Z,SERIAL_SELECTED
+        CP      0DH
+        JR      NZ,DUPLEX_KEY
+        JR      SERIAL_SELECTED
+SET_HALF:
+        LD      A,1
+        LD      (DUPLEX),A
 
 SERIAL_SELECTED:
         XOR     A
@@ -93,6 +128,7 @@ RUN_INIT:
         LD      (HEADPTR),HL
         XOR     A
         LD      (COLUMN),A
+        LD      (LINECOUNT),A
         LD      (PENDING_CR),A
         LD      A,'^'
         LD      (3FC0H),A
@@ -128,8 +164,8 @@ LOCAL_BACK:
         CALL    BACKSPACE
         JP      LOCAL_LOOP
 
-; Real RS-232: send raw key bytes, show only received bytes.
-; Half/full duplex selectable echo semantics are future work.
+; Real RS-232: incoming data always prints. Outgoing key locally
+; prints only in half-duplex mode (remote echo should be disabled).
 SERIAL_LOOP:
         IN      A,(0EAH)       ; UART status
         BIT     7,A            ; received byte available?
@@ -149,7 +185,12 @@ SERIAL_WAIT:
         JR      Z,SERIAL_WAIT
         LD      A,B
         OUT     (0EBH),A
-        JR      SERIAL_LOOP
+        LD      A,(DUPLEX)
+        OR      A
+        JP      Z,SERIAL_LOOP   ; full duplex: let remote echo keys
+        LD      A,B
+        CALL    RECEIVE        ; half duplex: print our own keys
+        JP      SERIAL_LOOP
 
 ; Incoming serial data: CRLF counts as one paper feed.
 RECEIVE:
@@ -185,8 +226,9 @@ REC_LF_NEW:
 REC_BS:
         JP      BACKSPACE
 
-; Print one character in A at row 14, move ^ exactly one column.
-; Never write past video RAM when column wraps from 63 to 0.
+; Count logical 80-character lines independently of 64-column screen.
+; At column 64, make a physical row wrap, but retain the logical count.
+; At logical character 80, ring the bell once, then CR/LF paper feed.
 PRINTCHAR:
         LD      HL,(PRINTPTR)
         LD      (HL),A
@@ -195,8 +237,14 @@ PRINTCHAR:
         LD      A,(COLUMN)
         INC     A
         LD      (COLUMN),A
+        LD      A,(LINECOUNT)
+        INC     A
+        LD      (LINECOUNT),A
+        CP      80
+        JP      Z,BELL_NEWLINE
+        LD      A,(COLUMN)
         CP      64
-        JP      Z,LINEFEED
+        JP      Z,SCROLL_PAPER
         LD      HL,(PRINTPTR)
         INC     HL
         LD      (PRINTPTR),HL
@@ -206,9 +254,20 @@ PRINTCHAR:
         LD      (HL),'^'
         RET
 
-; Scroll only paper rows 0..14, leaving head row 15 fixed.
-; 14 * 64 = 896 bytes (0380h) moved with LDIR.
+BELL_NEWLINE:
+        CALL    BELL
+        JP      LINEFEED
+
+; Explicit CR/LF resets logical line length.
 LINEFEED:
+        CALL    SCROLL_PAPER
+        XOR     A
+        LD      (LINECOUNT),A
+        RET
+
+; Scroll *only* paper rows 0..14, leaving head row 15 fixed.
+; 14 * 64 = 896 bytes (0380h) moved with LDIR.
+SCROLL_PAPER:
         LD      HL,3C40H       ; row 1
         LD      DE,3C00H       ; row 0
         LD      BC,0380H
@@ -244,6 +303,33 @@ BACKSPACE:
         DEC     HL
         LD      (PRINTPTR),HL
         LD      (HL),020H
+        LD      A,(LINECOUNT)
+        DEC     A
+        LD      (LINECOUNT),A
+        RET
+
+; Short single bell on character 80, via cassette sound output FFh.
+; AF and BC are saved so printhead and UART state remain intact.
+; This sound will be audible only with cassette audio enabled/connected.
+BELL:
+        PUSH    AF
+        PUSH    BC
+        LD      C,80
+BELL_CYCLE:
+        LD      A,1
+        OUT     (0FFH),A
+        LD      B,80
+BELL_HIGH:
+        DJNZ    BELL_HIGH
+        XOR     A
+        OUT     (0FFH),A
+        LD      B,80
+BELL_LOW:
+        DJNZ    BELL_LOW
+        DEC     C
+        JR      NZ,BELL_CYCLE
+        POP     BC
+        POP     AF
         RET
 
 ; Copy zero-terminated string HL to video address DE.
@@ -263,11 +349,13 @@ QUIT:
 
 MODE:       DEFB 0
 BAUD:       DEFB 0EEH
+DUPLEX:     DEFB 0             ; 0=full / remote echo; 1=half / local
 COLUMN:     DEFB 0
+LINECOUNT:  DEFB 0             ; printable chars since latest CR/LF
 PENDING_CR: DEFB 0
 PRINTPTR:   DEFW 3F80H
 HEADPTR:    DEFW 3FC0H
-MSG_TITLE:  DEFM "TRS-80 MODEL III TELETYPE/CMD V1.1"
+MSG_TITLE:  DEFM "TRS-80 MODEL III TELETYPE/CMD V1.3"
             DEFB 0
 MSG_MODE:   DEFM "SELECT OPERATING MODE"
             DEFB 0
@@ -280,6 +368,12 @@ MSG_BAUD:   DEFM "REAL RS232 - SELECT BAUD (8N1)"
 MSG_9600:   DEFM "1 - 9600 BAUD (DEFAULT)"
             DEFB 0
 MSG_300:    DEFM "2 - 300 BAUD"
+            DEFB 0
+MSG_DUPLEX: DEFM "SELECT SERIAL DUPLEX / ECHO MODE"
+            DEFB 0
+MSG_FULL:   DEFM "1 - FULL DUPLEX (REMOTE ECHO, DEFAULT)"
+            DEFB 0
+MSG_HALF:   DEFM "2 - HALF DUPLEX (LOCAL ECHO)"
             DEFB 0
 MSG_CHOOSE: DEFM "PRESS 1, 2 OR ENTER"
             DEFB 0
