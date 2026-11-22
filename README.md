@@ -1,77 +1,59 @@
 # TRS-80 Model III Teletype
 
-A teletype-style printhead and scrolling paper simulation for the 48 KB TRS-80 Model III. The prototype provides fast, **unthrottled local keyboard loopback** and an **experimental real RS-232** mode (9600 or 300 baud, 8N1). Intended for testing with George Phillips' TRS80GP 2.5.8.
+A minimal teletype screen simulator for **TRS-80 Model III (48K)**, using George Phillips' TRS80GP 2.5.8 for testing. The program has a fast local screen-test mode and an experimental real RS-232 mode.
 
-## Which BASIC are you using?
+## Which BASIC version?
 
-The screen showing **Cass?**, **Memory Size?**, and **Radio Shack Model III Basic** indicates the **ROM/cassette BASIC** environment, even if the machine also has TRSDOS available.
+- **[TELETYPE.BAS](TELETYPE.BAS)** — v1.1, **Radio Shack Model III ROM BASIC** (the screen with `Cass?` and `Memory Size?`)
+- **[TELEDOS.BAS](TELEDOS.BAS)** — v1.1, **TRSDOS Disk BASIC** with `DEFUSR0`
+- **[TELETYPE.ASM](TELETYPE.ASM)** — early native Z80 draft, not yet compiled or tested as a `/CMD` executable
 
-- **[TELETYPE.BAS](TELETYPE.BAS)** — **Model III ROM BASIC**, suitable for the **Cass? / Memory Size?** screen in TRS80GP. Uses the classic `USR(0)` entry vector at addresses 16526–16527.
-- **[TELEDOS.BAS](TELEDOS.BAS)** — **TRSDOS Disk BASIC** version. Uses `DEFUSR0` and `USR0(0)` instead.
-- **[TELETYPE.ASM](TELETYPE.ASM)** — a separate experimental assembly draft, not yet compiled into a working `TELETYPE/CMD`.
+## Startup
 
-Do **not** run the Disk BASIC version under ROM BASIC.
+The only required mode selection is:
 
-## Memory Size? (ROM BASIC)
+- **1 / Enter** — local screen test (default)
+- **2** — real RS-232 (experimental)
 
-At the Model III's startup prompts:
+**Local screen test** performs no UART I/O, no baud-rate selection, no baud delay, and no sound. Each keypress prints one character via a single `POKE` and moves the printhead. The goal is to validate screen behaviour first.
+
+**Real RS-232** then offers **9600 baud (default)** or **300 baud**, both 8N1. It waits for remote echo to display typed characters; BASIC polling at 9600 may drop characters. Real serial wiring and emulator configuration still require testing.
+
+**Half/full duplex selection** will be a future startup option, not part of v1.1.
+
+## Screen
+
+After the startup menu, the display is cleared and **has no header or status bar**:
+
+- Printed paper occupies **rows 0–14**, the entire 64-column width
+- Printhead `^` moves across **row 15**
+- Every line feed moves paper one row up; old lines reach **the very top** before disappearing
+- Enter feeds paper; wrapping at 64 columns also feeds
+- Backspace erases the previous character on the current line
+- Ctrl-] exits the program
+
+To address the earlier post-Enter issue, local line feed now uses a normal `GOSUB 700` / `RETURN` so keyboard processing resumes.
+
+## Paper-feed performance: optional 33-byte Z80 routine
+
+For a fast paper feed, reserve high memory at startup in the **48K** Model III:
 
 ```text
-Cass?               [press Enter]
-Memory Size?         [press Enter]
-```
-
-The ROM BASIC version will run using ordinary BASIC paper scrolling. This is slower on **line feeds** but has no special memory requirement.
-
-For **fast machine-code scrolling** on a 48 KB machine, reset ROM BASIC and answer:
-
-```text
-Cass?               [press Enter]
+Cass?             [Enter]
 Memory Size? 61439
 ```
 
-This protects memory starting at **F000h (61440)**. When the program detects exactly this reserved BASIC memory limit, it loads a 25-byte Z80 scroll routine at F000h, sets the ROM BASIC USR entry vector to F000h, and uses `USR(0)` to move paper. If the limit does not match, it **does not poke machine code into high memory** and instead uses a slower BASIC loop for line feed.
+This limits BASIC's available RAM to `EFFFh` and protects the machine-code routine installed at `F000h`. The program checks the BASIC memory limit and only installs the routine when it equals 61439. It then uses Z80 `LDIR` to move the 14 visible historical paper lines up and clear the active row. The routine preserves AF, BC, DE, and HL.
 
-The TRSDOS Disk BASIC version uses the same reservation and code but calls it through `DEFUSR0=-4096` and `USR0(0)`. For TRSDOS, start `BASIC` from DOS READY and enter `61439` at its MEMORY SIZE prompt to enable acceleration.
+If you simply press Enter at `Memory Size?`, the program uses a pure BASIC `PEEK`/`POKE` scrolling fallback. Printing individual characters still remains unthrottled; however, **each Enter may be noticeably slower** in that fallback mode.
 
-## Startup options
+The ROM BASIC version calls `USR(0)`; the Disk BASIC version uses `DEFUSR0` and `USR0(0)`. Do not exchange these versions.
 
-The mode selection comes first:
+## Testing notes
 
-- **1 / Enter:** local software loopback, **unthrottled** (default)
-- **2:** real RS-232 serial port (experimental)
-
-Only real RS-232 mode asks for baud:
-
-- **1 / Enter:** 9600 baud (default)
-- **2:** 300 baud
-
-Both real serial configurations target **8 data bits, no parity, 1 stop bit**.
-
-A **half-duplex/full-duplex** choice is planned for a future menu; it has not been implemented.
-
-## Display and controls
-
-- All 64 columns are available for text (no paper side borders).
-- Video rows 3–12 represent paper; row 13 displays a moving `^` printhead.
-- Every typed printable character is written straight into video RAM via `POKE`.
-- **Enter:** paper feeds upward by a row in local mode.
-- **Backspace:** removes the previous printed character on the current line.
-- **Ctrl-]:** exit.
-- Column 64 automatically wraps and feeds paper.
-
-For a character, the program updates only that video location and two printhead locations. With memory reserved, the Z80 scroll uses **LDIR** to shift 576 paper bytes up and fill the 64-character active row. Without memory reserved, scrolling uses BASIC `PEEK`/`POKE`.
-
-## Testing
-
-Start in **local loopback** to verify the screen. It performs *no real UART I/O* and imposes no artificial 300/9600 baud delay. If rapid typing still loses keys, the remaining cause is likely BASIC interpreter/keyboard polling speed, rather than a baud-rate throttle.
-
-Real RS-232 mode uses the Model III serial card ports directly and assumes **remote echo**. Polling the UART from BASIC is experimental and could still lose characters, especially at 9600 baud. Start with 300 baud and verify emulator/device setup.
-
-**Status: not yet execution-tested in TRS80GP or on real hardware.** Please report any error and its BASIC line number.
+v1.1 has been reviewed statically and committed, but **not yet run in TRS80GP or on the real Model III**. Please test in local mode, including a few Enters, and report any BASIC error or line number. If the emulated BASIC interpreter is still dropping rapid keystrokes, moving keyboard polling into machine code will be the next performance step.
 
 ## References
 
-- User-supplied *TRSDOS & Disk BASIC Reference Manual*, sections 7-16 and 7-24 to 7-29 for machine-language calls.
-- [Model III BASIC tips](https://www.trs-80.com/sub-tips-model-3.htm)
-- [TRS-80 USR/PEEK/POKE techniques](https://www.trs-80.com/sub-tips-packing.htm)
+- User-provided *TRSDOS & Disk BASIC Reference Manual*, sections 7-16 and 7-24–7-29 (`DEFUSR`, `USRn` and machine-code examples)
+- [TRS-80 RAM addresses and BASIC vectors](https://www.trs-80.com/main-internal-ram-addresses-and-routines.htm)
