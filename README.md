@@ -1,54 +1,71 @@
 # TRS-80 Model III Teletype
 
-An experimental full-width teletype paper and moving printhead display for a TRS-80 Model III (48 KB) running TRSDOS Disk BASIC. Intended for testing in George Phillips' TRS80GP 2.5.8, then on physical hardware.
+A TRS-80 Model III teletype paper/printhead simulator and experimental RS-232 terminal in TRSDOS Disk BASIC. Designed for a 48 KB Model III and testing in George Phillips' TRS80GP 2.5.8.
 
-## BASIC source
+## Source
 
-[TELETYPE.BAS](TELETYPE.BAS) — version 0.6.
+- [TELETYPE.BAS](TELETYPE.BAS) — **v0.8**, optimised display and machine-code paper scrolling
+- [TELETYPE.ASM](TELETYPE.ASM) — separate early native Z80 terminal draft, not yet compiled or validated as a `/CMD` executable
 
-### Startup options
+## IMPORTANT: reserve memory before running v0.8
 
-The first menu selects speed:
+The BASIC program installs a **25-byte Z80 paper-feed routine at F000h (decimal 61440)**. Starting TRSDOS Disk BASIC, respond to the prompts as follows:
 
-- **1** — 9600 baud (default)
-- **2** — 300 baud
-- **ENTER** — accept 9600
+```text
+DOS READY
+BASIC
+HOW MANY FILES? 0
+MEMORY SIZE? 61439
+```
 
-The second menu selects mode:
+Use a 48 KB Model III. When the BASIC prompt appears, load the program and `RUN`. Use `RUN "TELETYPE/BAS"` if the BASIC-format file has been saved to disk.
 
-- **1** — Local software loopback (default)
-- **2** — Real RS-232 serial port
-- **ENTER** — accept local loopback
+**Why this matters:** BASIC must not use the machine-code memory area. The program checks its high-memory limit and refuses to run if the required space was not reserved. If you have already started BASIC without this setting, leave BASIC, then restart it with `MEMORY SIZE? 61439`.
 
-All modes use **8N1**: 8 data bits, no parity, 1 stop bit.
+Technical notes: `DEFUSR0=-4096` specifies F000h as a signed address; BASIC uses `POKE -4096+I,D` to install the code. The program calls `Z=USR0(0)` when feeding paper. The included Z80 bytes do one 576-byte `LDIR` (screen rows 4–12 onto rows 3–11), then clear the bottom paper row using an additional 63-byte `LDIR` after planting one blank character. The machine routine returns with `RET`. It does not access serial or cassette ports.
 
-In **local loopback**, keyboard characters pass through a software TX -> RX variable path into the paper display, without accessing the serial card. Baud rate is informational only in this mode.
+## Startup options
 
-In **real RS-232**, the program initializes the Model III UART using ports E8/E9/EA and reads/writes data using EB. This mode **actually accesses serial hardware**. It assumes **remote echo**; locally typed characters are not immediately printed. The selected baud rate is applied to both receive and transmit. RS-232 receive is polled using BASIC, so **9600 baud is experimental and may overrun or lose characters**, particularly during the paper redraw. 300 baud is more practical for the BASIC stage. Check the emulator's serial mapping and the remote device's matching settings.
+The **first menu** offers:
 
-### Controls
+- **1 / Enter:** fast local software loopback (default)
+- **2:** real RS-232 serial port (experimental)
 
-- Printable keys: transmit (and print in local mode, or print upon receiving remote echo in real mode).
-- **ENTER:** newline locally; sends CR in real mode.
-- **Backspace:** delete previous print position locally; transmit BS in real mode.
-- **Ctrl-]:** exit.
+**Local mode:** echoes keystrokes directly into the moving-printhead display. It has **no baud-rate setting or artificial delay** and never accesses the RS-232 hardware.
 
-### Display
+**Real RS-232 mode** displays a second menu:
 
-Uses all **64 columns** of the Model III text screen; there are no side borders. Rows 3-12 are paper, row 13 shows the moving `^` printhead indicator. Newline advances paper upward. An 11th row is not drawn; printed lines scroll through the ten-row paper region.
+- **1 / Enter:** 9600 baud (default)
+- **2:** 300 baud
 
-### Hardware details
+Both real rates use **8 data bits, no parity, 1 stop bit (8N1)**. The UART setup accesses the TRS-80 Model III's serial ports; real mode expects **remote echo** and prints received bytes only. The BASIC interpreter may drop incoming characters at 9600 baud; start hardware testing at 300 baud.
 
-Model III serial ports: E8 (232) resets UART, E9 (233) selects baud, EA (234) sets 8N1 control / returns status, EB (235) transfers bytes. Values: **238** for 9600, **85** for 300, **104** for 8N1 control with DTR/RTS asserted. These direct-port operations should be tested cautiously on the Model III and TRS80GP. The PiDP-11/70 USB serial interface must use an appropriate **RS-232-level** adapter and wiring; do not connect a TTL GPIO UART directly.
+**Half/full duplex:** planned as an additional startup option in a future version; it is **not yet implemented**.
 
-References: [Model III port documentation](https://www.trs-80.com/main-internal-ports-and-i-o.htm).
+## Screen behaviour
 
-## Running
+- Full 64 columns; no paper-side borders.
+- Rows 3–12 are the paper; row 13 carries a small `^` printhead position marker.
+- Each printable byte advances the head one column.
+- Enter locally advances the paper upward by a line.
+- At column 64, line feed happens automatically.
+- Backspace erases the previous character on the current line.
+- Ctrl-] exits.
 
-Enter or import the ASCII BASIC listing using TRSDOS Disk BASIC, then `RUN`. Save as `TELETYPE/BAS` for subsequent use.
+The screen uses direct `POKE` updates per keystroke. Each normal character needs only an update to the paper cell and the old/new printhead marker. The slow interpreted BASIC nested `PEEK`/`POKE` loops previously used for paper feed have been replaced with Z80 `LDIR`.
 
-## Status and next steps
+## Planned
 
-**Experimental, not yet verified in TRS80GP or on actual hardware.** Start with local loopback for screen testing; use 300 baud for initial real serial testing. Future work: print-strike audio through the cassette interface, improved printhead motion, reliable high-speed RS-232 reception in native Z80 code, and a tested `TELETYPE/CMD` executable.
+- Half/full duplex configuration in the startup menu
+- Cassette-port mechanical printing and carriage-return sounds
+- Reliable RS-232 high-speed reception in a native Z80 `TELETYPE/CMD`
+- Real-hardware and emulator test reports
 
-[TELETYPE.ASM](TELETYPE.ASM) is a separate early Z80 draft; no validated `TELETYPE/CMD` binary has been published.
+## Status
+
+**Prototype / not verified in TRS80GP 2.5.8 or on real hardware.** Report BASIC syntax or runtime errors with line numbers so the source can be corrected.
+
+## References
+
+- User-supplied *TRSDOS & Disk BASIC Reference Manual* (TRSDOS v2.3, Disk BASIC v2.2), sections on `DEFUSR` and `USRn` (manual pages 7-16 and 7-24–7-29)
+- [TRS-80 Model III serial and I/O reference](https://www.trs-80.com/main-internal-ports-and-i-o.htm)
