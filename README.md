@@ -6,10 +6,10 @@ A full-screen Teletype-style terminal for the **48 KB TRS-80 Model III**, with a
 
 | File | Description |
 | --- | --- |
-| [TELETYPE.CMD](TELETYPE.CMD) | Native Z80 test program **v1.5** for TRSDOS/LDOS, loads at 7000h |
-| [TELETYPE.ASM](TELETYPE.ASM) | Assembly source for the v1.3 native binary |
-| [TELEDOS.BAS](TELEDOS.BAS) | **v1.4** TRSDOS Disk BASIC prototype |
-| [TELETYPE.BAS](TELETYPE.BAS) | **v1.4** Model III ROM BASIC prototype |
+| [TELETYPE.CMD](TELETYPE.CMD) | Native Z80 test program **v1.6** for TRSDOS/LDOS, loads at 7000h |
+| [TELETYPE.ASM](TELETYPE.ASM) | Assembly source for the v1.6 native binary |
+| [TELEDOS.BAS](TELEDOS.BAS) | **v1.6** TRSDOS Disk BASIC prototype |
+| [TELETYPE.BAS](TELETYPE.BAS) | **v1.6** Model III ROM BASIC prototype |
 
 ### Running the native program
 
@@ -28,6 +28,19 @@ The startup menus are:
 **Full duplex** transmits keys but prints them only if they are echoed by the remote device. **Half duplex** transmits and locally displays the keys, so disable remote echo to avoid duplicates. Incoming serial data displays in either mode. These are terminal echo modes, not hardware flow-control settings.
 
 Local screen-test mode does not use the UART or apply any artificial baud-rate delay. **Ctrl-]** or the physical **BREAK key** exits back to DOS READY and restores the normal ROM cursor. BREAK is also checked during startup-menu selection and while waiting for the serial transmitter, so a cable/handshake problem does not trap the terminal.
+
+## Enter key over real RS-232 (v1.6)
+
+When **Enter is pressed on the TRS-80 keyboard** in real RS-232 mode, the terminal transmits **two serial bytes**, in sequence:
+
+```text
+0DH    CR (carriage return)
+0AH    LF (line feed)
+```
+
+It checks transmit readiness before sending each byte. All other keys transmit their usual single byte. In half duplex, the local on-screen echo still advances paper **once**, not twice. In full duplex, the remote device is responsible for echoing the CR/LF pair, which the receiver coalesces into a single paper feed. This differs from the **automatic 80-character display wrap**, which remains an on-screen feature and does not transmit CR/LF to the remote device.
+
+**Important:** A previous physical-hardware report indicated that the Model III received at 9600 baud but did not successfully transmit. The CR/LF change assumes working transmission and is **not itself a fix** for the one-way link. Check serial cable handshaking and transmitter readiness if the remote screen remains blank.
 
 ## 80-character Teletype lines on a 64-column Model III screen
 
@@ -68,7 +81,7 @@ On the next test, verify the terminal mode, 9600 baud / 8N1, serial cable (null-
 
 ## Status
 
-The native v1.5 command was rebuilt by patching the verified v1.3 TRSDOS load records and appending three machine-code keyboard/transmitter helpers. The load-block lengths, transfer address, patched calls and BREAK checks were checked statically. The v1.5 modifications have **not yet been tested on real hardware**. Earlier versions have been used for screen tests on TRS80GP and the physical Model III; one-way RS-232 reception at 9600 baud has been reported.
+The native v1.6 command was rebuilt by patching the verified v1.3 TRSDOS load records and appending three machine-code keyboard/transmitter helpers. The load-block lengths, transfer address, patched calls and BREAK checks were checked statically. The v1.5 modifications have **not yet been tested on real hardware**. Earlier versions have been used for screen tests on TRS80GP and the physical Model III; one-way RS-232 reception at 9600 baud has been reported.
 
 ## References
 
