@@ -6,7 +6,7 @@ A full-screen Teletype-style terminal for the **48 KB TRS-80 Model III**, with a
 
 | File | Description |
 | --- | --- |
-| [TELETYPE.CMD](TELETYPE.CMD) | Native Z80 test program **v1.3** for TRSDOS/LDOS, loads at 7000h |
+| [TELETYPE.CMD](TELETYPE.CMD) | Native Z80 test program **v1.5** for TRSDOS/LDOS, loads at 7000h |
 | [TELETYPE.ASM](TELETYPE.ASM) | Assembly source for the v1.3 native binary |
 | [TELEDOS.BAS](TELEDOS.BAS) | **v1.4** TRSDOS Disk BASIC prototype |
 | [TELETYPE.BAS](TELETYPE.BAS) | **v1.4** Model III ROM BASIC prototype |
@@ -27,7 +27,7 @@ The startup menus are:
 
 **Full duplex** transmits keys but prints them only if they are echoed by the remote device. **Half duplex** transmits and locally displays the keys, so disable remote echo to avoid duplicates. Incoming serial data displays in either mode. These are terminal echo modes, not hardware flow-control settings.
 
-Local screen-test mode does not use the UART or apply any artificial baud-rate delay. **Ctrl-]** exits back to DOS READY and restores the normal ROM cursor.
+Local screen-test mode does not use the UART or apply any artificial baud-rate delay. **Ctrl-]** or the physical **BREAK key** exits back to DOS READY and restores the normal ROM cursor. BREAK is also checked during startup-menu selection and while waiting for the serial transmitter, so a cable/handshake problem does not trap the terminal.
 
 ## 80-character Teletype lines on a 64-column Model III screen
 
@@ -57,9 +57,18 @@ Because the bell is synchronous, printing pauses briefly at each 80th character.
 
 For reliable local screen behaviour, **use the native `TELETYPE.CMD`** instead of the BASIC prototypes.
 
+
+## Real Model III RS-232 diagnostics (v1.5)
+
+A hardware test found that the remote terminal could transmit characters **to** the TRS-80 at 9600 baud, but characters typed at the TRS-80 did not reach the remote terminal. The newest assembly source now agrees with the shipped UART initialization byte `6Ch` (the older repository source erroneously showed `68h`). **The v1.3 binary already used `6Ch`, so this source correction alone is not proven to fix the one-way transmit problem.** The ready-to-transmit check is bit 6 of port `EAh`.
+
+In v1.5, the keyboard **BREAK** key at memory address `3840h`, bit 2, is checked in the normal keyboard scanning loop and while polling transmit readiness. If the UART is blocked waiting to transmit, BREAK should return to DOS READY instead of trapping the operator in that loop. Ctrl-] still exits normally.
+
+On the next test, verify the terminal mode, 9600 baud / 8N1, serial cable (null-modem/crossover as appropriate), and handshake signals. If no characters transmit, test 300 baud and inspect whether CTS is correctly supplied on the TRS-80's RS-232 connector. Choosing half duplex echoes typed characters to the TRS-80 screen but does **not** itself prove the bytes were transmitted to the remote terminal.
+
 ## Status
 
-The native v1.3 program was assembled into a TRSDOS command file and passed **instruction-level simulated Z80 tests** for menu selection, full/half duplex, local printing, 64-column physical wrapping, the 80th-character bell, linefeed, backspace, and returning from the bell to printing. The `/CMD` file's load and execution records were checked. It **has not yet been tested in TRS80GP or on physical hardware**.
+The native v1.5 command was rebuilt by patching the verified v1.3 TRSDOS load records and appending three machine-code keyboard/transmitter helpers. The load-block lengths, transfer address, patched calls and BREAK checks were checked statically. The v1.5 modifications have **not yet been tested on real hardware**. Earlier versions have been used for screen tests on TRS80GP and the physical Model III; one-way RS-232 reception at 9600 baud has been reported.
 
 ## References
 
