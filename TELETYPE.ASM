@@ -1,4 +1,4 @@
-; TELETYPE/CMD v1.0 - TRS-80 Model III native Z80 teletype
+; TELETYPE/CMD v1.1 - TRS-80 Model III native Z80 teletype
 ; TRSDOS/LDOS command file; 48K Model III, RS-232 option.
 ; Origin 7000h keeps clear of TRSDOS library command overlays.
 ; No BASIC or memory-size reservation required.
@@ -85,6 +85,8 @@ SERIAL_SELECTED:
 
 RUN_INIT:
         CALL    01C9H           ; erase startup menus completely
+        LD      A,0FH           ; Model III ROM: disable flashing cursor
+        CALL    0033H           ; keep only our ^ printhead visible
         LD      HL,3F80H       ; paper printing line, screen row 14
         LD      (PRINTPTR),HL
         LD      HL,3FC0H       ; printhead row 15
@@ -255,6 +257,8 @@ PRINT_AT:
         JR      PRINT_AT
 
 QUIT:
+        LD      A,0EH           ; restore ROM cursor for DOS prompt
+        CALL    0033H
         JP      402DH          ; TRSDOS/LDOS DOS READY reentry
 
 MODE:       DEFB 0
@@ -263,7 +267,7 @@ COLUMN:     DEFB 0
 PENDING_CR: DEFB 0
 PRINTPTR:   DEFW 3F80H
 HEADPTR:    DEFW 3FC0H
-MSG_TITLE:  DEFM "TRS-80 MODEL III TELETYPE/CMD V1.0"
+MSG_TITLE:  DEFM "TRS-80 MODEL III TELETYPE/CMD V1.1"
             DEFB 0
 MSG_MODE:   DEFM "SELECT OPERATING MODE"
             DEFB 0
