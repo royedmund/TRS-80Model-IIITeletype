@@ -1,82 +1,54 @@
-# TRS-80 Model III Teletype Terminal
+# TRS-80 Model III Teletype
 
-An experimental teletype terminal for a **TRS-80 Model III running LDOS 5.3**, intended eventually to connect to a PiDP-11/70 via RS-232 at **300 baud, 8 data bits, no parity, 1 stop bit (8N1)**.
+An experimental full-width teletype paper and moving printhead display for a TRS-80 Model III (48 KB) running TRSDOS Disk BASIC. Intended for testing in George Phillips' TRS80GP 2.5.8, then on physical hardware.
 
-## BASIC paper-and-printhead prototype
+## BASIC source
 
-[TELETYPE.BAS](TELETYPE.BAS) is the first **local simulated RS-232 loopback** prototype. Keyboard bytes go through a software TX-to-RX path and are then printed; no serial hardware is accessed. It uses the Model III's native 64 x 16 video display to simulate:
+[TELETYPE.BAS](TELETYPE.BAS) — version 0.6.
 
-- A teletype paper window with an advancing printhead
-- Every typed byte is copied from simulated TX to RX, then processed for printing
-- **Paper moving upward** with each line feed / ENTER
-- Automatic carriage return and line feed at the right margin
-- Backspace to erase the last character
-- Ctrl-] to exit
+### Startup options
 
-Run from LDOS Disk BASIC after saving the listing as `TELETYPE/BAS`:
+The first menu selects speed:
 
-```basic
-RUN "TELETYPE/BAS"
-```
+- **1** — 9600 baud (default)
+- **2** — 300 baud
+- **ENTER** — accept 9600
 
-The paper occupies rows 2-12; the last paper row is the active printing line. The small `^` beneath the paper marks the moving printhead. On Enter, the eleven-line paper buffer shifts up and the printhead returns to the left.
+The second menu selects mode:
 
-**Not implemented yet:** actual RS-232 I/O, hardware loopback, 300-baud timing and cassette-port mechanical strike sounds. This is software echo only. The on-screen 300 8N1 label is a design target, not a working serial link.
+- **1** — Local software loopback (default)
+- **2** — Real RS-232 serial port
+- **ENTER** — accept local loopback
 
-## Z80 source
+All modes use **8N1**: 8 data bits, no parity, 1 stop bit.
 
-[TELETYPE.ASM](TELETYPE.ASM) is early, experimental assembly source for a separate terminal implementation. **No compiled `TELETYPE/CMD` binary has been published in this repository yet.** The assembly code has not been tested on the actual Model III hardware.
+In **local loopback**, keyboard characters pass through a software TX -> RX variable path into the paper display, without accessing the serial card. Baud rate is informational only in this mode.
 
-## Local loopback path
+In **real RS-232**, the program initializes the Model III UART using ports E8/E9/EA and reads/writes data using EB. This mode **actually accesses serial hardware**. It assumes **remote echo**; locally typed characters are not immediately printed. The selected baud rate is applied to both receive and transmit. RS-232 receive is polled using BASIC, so **9600 baud is experimental and may overrun or lose characters**, particularly during the paper redraw. 300 baud is more practical for the BASIC stage. Check the emulator's serial mapping and the remote device's matching settings.
 
-`INKEY# TRS-80 Model III Teletype Terminal
+### Controls
 
-An experimental teletype terminal for a **TRS-80 Model III running LDOS 5.3**, intended eventually to connect to a PiDP-11/70 via RS-232 at **300 baud, 8 data bits, no parity, 1 stop bit (8N1)**.
+- Printable keys: transmit (and print in local mode, or print upon receiving remote echo in real mode).
+- **ENTER:** newline locally; sends CR in real mode.
+- **Backspace:** delete previous print position locally; transmit BS in real mode.
+- **Ctrl-]:** exit.
 
-## BASIC paper-and-printhead prototype
+### Display
 
-[TELETYPE.BAS](TELETYPE.BAS) is the first **local simulated RS-232 loopback** prototype. Keyboard bytes go through a software TX-to-RX path and are then printed; no serial hardware is accessed. It uses the Model III's native 64 x 16 video display to simulate:
+Uses all **64 columns** of the Model III text screen; there are no side borders. Rows 3-12 are paper, row 13 shows the moving `^` printhead indicator. Newline advances paper upward. An 11th row is not drawn; printed lines scroll through the ten-row paper region.
 
-- A teletype paper window with an advancing printhead
-- Every typed byte is copied from simulated TX to RX, then processed for printing
-- **Paper moving upward** with each line feed / ENTER
-- Automatic carriage return and line feed at the right margin
-- Backspace to erase the last character
-- Ctrl-] to exit
+### Hardware details
 
-Run from LDOS Disk BASIC after saving the listing as `TELETYPE/BAS`:
+Model III serial ports: E8 (232) resets UART, E9 (233) selects baud, EA (234) sets 8N1 control / returns status, EB (235) transfers bytes. Values: **238** for 9600, **85** for 300, **104** for 8N1 control with DTR/RTS asserted. These direct-port operations should be tested cautiously on the Model III and TRS80GP. The PiDP-11/70 USB serial interface must use an appropriate **RS-232-level** adapter and wiring; do not connect a TTL GPIO UART directly.
 
-```basic
-RUN "TELETYPE/BAS"
-```
+References: [Model III port documentation](https://www.trs-80.com/main-internal-ports-and-i-o.htm).
 
-The paper occupies rows 2-12; the last paper row is the active printing line. The small `^` beneath the paper marks the moving printhead. On Enter, the eleven-line paper buffer shifts up and the printhead returns to the left.
+## Running
 
-**Not implemented yet:** actual RS-232 I/O, hardware loopback, 300-baud timing and cassette-port mechanical strike sounds. This is software echo only. The on-screen 300 8N1 label is a design target, not a working serial link.
+Enter or import the ASCII BASIC listing using TRSDOS Disk BASIC, then `RUN`. Save as `TELETYPE/BAS` for subsequent use.
 
-## Z80 source
+## Status and next steps
 
-[TELETYPE.ASM](TELETYPE.ASM) is early, experimental assembly source for a separate terminal implementation. **No compiled `TELETYPE/CMD` binary has been published in this repository yet.** The assembly code has not been tested on the actual Model III hardware.
+**Experimental, not yet verified in TRS80GP or on actual hardware.** Start with local loopback for screen testing; use 300 baud for initial real serial testing. Future work: print-strike audio through the cassette interface, improved printhead motion, reliable high-speed RS-232 reception in native Z80 code, and a tested `TELETYPE/CMD` executable.
 
- -> `TX` -> software `RX=TX` -> print routine / paper feed. No cable, adapter or RS-232 emulator settings are required for this mode. The `300 8N1` display indicates the future serial target only.
-
-## Planned improvements
-
-1. More lifelike paper feed and printhead animation, maintaining the 64 x 16 display limitations.
-2. Printhead impact and carriage-return effects using the cassette output, with safe port handling.
-3. Real 300 8N1 communications through the Model III RS-232 card to the PiDP-11/70.
-4. Tested LDOS `TELETYPE/CMD` executable and bootable disk distribution.
-
-## Hardware notes
-
-The Model III RS-232 signals use RS-232 electrical levels, not the Pi's TTL GPIO UART levels. Use a suitable USB-to-RS-232 adapter and cable wiring, with appropriate null-modem connections or handshaking as required.
-
-## Status
-
-**Prototype / not hardware-tested.** Please report any BASIC syntax, keyboard, or display issues observed under LDOS 5.3.
-
-## References
-
-- [TRS-80 Model III specifications](https://www.trs-80.com/sub-models-model3.htm)
-- [TRS-80 graphics and character codes](https://www.trs-80.com/sub-tips-graphics.htm)
-- [LDOS Model III BASIC disassembly](https://www.trs-80.com/sub-disassem-dos-ldos-m3-basic-cmd.htm)
+[TELETYPE.ASM](TELETYPE.ASM) is a separate early Z80 draft; no validated `TELETYPE/CMD` binary has been published.
