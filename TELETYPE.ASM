@@ -1,4 +1,4 @@
-; TELETYPE/CMD v1.3 - TRS-80 Model III native Z80 teletype
+; TELETYPE/CMD v1.5 - TRS-80 Model III native Z80 teletype
 ; TRSDOS/LDOS command file; 48K Model III, RS-232 option.
 ; Origin 7000h keeps clear of TRSDOS library command overlays.
 ; No BASIC or memory-size reservation required.
@@ -28,7 +28,7 @@ START:  CALL    01C9H           ; ROM clear display
         CALL    PRINT_AT
 
 MODE_KEY:
-        CALL    0049H           ; ROM wait for keyboard key
+        CALL    WAIT_KEY           ; ROM wait for keyboard key
         CP      '2'
         JP      Z,BAUD_MENU
         CP      '1'
@@ -64,7 +64,7 @@ BAUD_MENU:
         CALL    PRINT_AT
 
 BAUD_KEY:
-        CALL    0049H
+        CALL    WAIT_KEY
         CP      '2'
         JR      Z,BAUD_300
         CP      '1'
@@ -98,7 +98,7 @@ DUPLEX_MENU:
         LD      DE,3E00H
         CALL    PRINT_AT
 DUPLEX_KEY:
-        CALL    0049H
+        CALL    WAIT_KEY
         CP      '2'
         JR      Z,SET_HALF
         CP      '1'
@@ -115,8 +115,8 @@ SERIAL_SELECTED:
         OUT     (0E8H),A       ; reset UART
         LD      A,(BAUD)
         OUT     (0E9H),A       ; set baud (EEH 9600; 55H 300)
-        LD      A,068H
-        OUT     (0EAH),A       ; 8N1, parity off, DTR/RTS asserted
+        LD      A,06CH          ; 8N1, transmitter enabled
+        OUT     (0EAH),A       ; 8N1, transmitter enabled, DTR/RTS active
 
 RUN_INIT:
         CALL    01C9H           ; erase startup menus completely
@@ -139,7 +139,7 @@ RUN_INIT:
 
 ; Local mode: read directly from ROM keyboard, immediately display.
 LOCAL_LOOP:
-        CALL    002BH           ; one keyboard scan, no echo
+        CALL    GET_KEY           ; one keyboard scan, no echo
         OR      A
         JR      Z,LOCAL_LOOP
         CP      01DH            ; Ctrl-]
@@ -173,16 +173,17 @@ SERIAL_LOOP:
         IN      A,(0EBH)
         CALL    RECEIVE
 SERIAL_KEY:
-        CALL    002BH
+        CALL    GET_KEY
         OR      A
         JR      Z,SERIAL_LOOP
         CP      01DH
         JP      Z,QUIT
         LD      B,A
 SERIAL_WAIT:
-        IN      A,(0EAH)
-        BIT     6,A            ; TX holding register empty/sent?
-        JR      Z,SERIAL_WAIT
+        CALL    TXREADY       ; BREAK also aborts a blocked UART send
+        NOP                    ; hold binary addresses stable for this build
+        NOP
+        NOP
         LD      A,B
         OUT     (0EBH),A
         LD      A,(DUPLEX)
@@ -355,7 +356,7 @@ LINECOUNT:  DEFB 0             ; printable chars since latest CR/LF
 PENDING_CR: DEFB 0
 PRINTPTR:   DEFW 3F80H
 HEADPTR:    DEFW 3FC0H
-MSG_TITLE:  DEFM "TRS-80 MODEL III TELETYPE/CMD V1.3"
+MSG_TITLE:  DEFM "TRS-80 MODEL III TELETYPE/CMD V1.5"
             DEFB 0
 MSG_MODE:   DEFM "SELECT OPERATING MODE"
             DEFB 0
@@ -377,5 +378,33 @@ MSG_HALF:   DEFM "2 - HALF DUPLEX (LOCAL ECHO)"
             DEFB 0
 MSG_CHOOSE: DEFM "PRESS 1, 2 OR ENTER"
             DEFB 0
+
+; BREAK hardware key is at 3840H bit 2, also returned as 01H
+; by the Model III ROM keyboard scan. Ctrl-] remains supported.
+GET_KEY:
+        LD      A,(3840H)
+        AND     04H
+        JP      NZ,QUIT
+        CALL    002BH
+        CP      01H
+        JP      Z,QUIT
+        RET
+
+WAIT_KEY:
+        CALL    0049H
+        CP      01H
+        JP      Z,QUIT
+        RET
+
+; Poll UART TX-ready bit 6, but do not trap the user indefinitely.
+; BREAK exits to DOS even when TX-ready never becomes set.
+TXREADY:
+        IN      A,(0EAH)
+        BIT     6,A
+        RET     NZ
+        LD      A,(3840H)
+        AND     04H
+        JP      NZ,QUIT
+        JR      TXREADY
 
         END START
