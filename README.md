@@ -1,59 +1,68 @@
 # TRS-80 Model III Teletype
 
-A minimal teletype screen simulator for **TRS-80 Model III (48K)**, using George Phillips' TRS80GP 2.5.8 for testing. The program has a fast local screen-test mode and an experimental real RS-232 mode.
+A mechanical teletype-style **visual terminal emulator** for the 48 KB TRS-80 Model III. The project supports full-width (64-column) printing, a moving printhead marker, upward-scrolling paper, and local or RS-232 operation.
 
-## Which BASIC version?
+## Programs
 
-- **[TELETYPE.BAS](TELETYPE.BAS)** — v1.1, **Radio Shack Model III ROM BASIC** (the screen with `Cass?` and `Memory Size?`)
-- **[TELEDOS.BAS](TELEDOS.BAS)** — v1.1, **TRSDOS Disk BASIC** with `DEFUSR0`
-- **[TELETYPE.ASM](TELETYPE.ASM)** — early native Z80 draft, not yet compiled or tested as a `/CMD` executable
+| File | Purpose |
+| --- | --- |
+| [TELETYPE.CMD](TELETYPE.CMD) | Native Z80 executable for TRSDOS/LDOS; no BASIC needed |
+| [TELETYPE.ASM](TELETYPE.ASM) | Z80 source corresponding to the native terminal |
+| [TELETYPE.BAS](TELETYPE.BAS) | Model III ROM BASIC prototype (the `Cass?` / `Memory Size?` environment) |
+| [TELEDOS.BAS](TELEDOS.BAS) | TRSDOS Disk BASIC prototype with accelerated Z80 paper feed |
 
-## Startup
+**The native `TELETYPE/CMD` executable is a test build.** The binary has not yet been run on TRS80GP or a physical Model III. Use a disposable/copy test disk and report the results.
 
-The only required mode selection is:
+## Native Z80 terminal — TELETYPE/CMD
 
-- **1 / Enter** — local screen test (default)
-- **2** — real RS-232 (experimental)
-
-**Local screen test** performs no UART I/O, no baud-rate selection, no baud delay, and no sound. Each keypress prints one character via a single `POKE` and moves the printhead. The goal is to validate screen behaviour first.
-
-**Real RS-232** then offers **9600 baud (default)** or **300 baud**, both 8N1. It waits for remote echo to display typed characters; BASIC polling at 9600 may drop characters. Real serial wiring and emulator configuration still require testing.
-
-**Half/full duplex selection** will be a future startup option, not part of v1.1.
-
-## Screen
-
-After the startup menu, the display is cleared and **has no header or status bar**:
-
-- Printed paper occupies **rows 0–14**, the entire 64-column width
-- Printhead `^` moves across **row 15**
-- Every line feed moves paper one row up; old lines reach **the very top** before disappearing
-- Enter feeds paper; wrapping at 64 columns also feeds
-- Backspace erases the previous character on the current line
-- Ctrl-] exits the program
-
-To address the earlier post-Enter issue, local line feed now uses a normal `GOSUB 700` / `RETURN` so keyboard processing resumes.
-
-## Paper-feed performance: optional 33-byte Z80 routine
-
-For a fast paper feed, reserve high memory at startup in the **48K** Model III:
+Save the supplied `TELETYPE.CMD` file to the TRSDOS/LDOS disk as `TELETYPE/CMD`. At **DOS READY**, enter:
 
 ```text
-Cass?             [Enter]
+TELETYPE
+```
+
+Startup mode selection:
+
+- **1 or Enter** — local screen test (default). Prints locally, with no artificial speed limit.
+- **2** — real Model III RS-232. Choose **9600 baud (default)** or **300 baud**; both use **8N1** (8 data bits, no parity, 1 stop bit).
+
+In real serial mode, typed keys are sent over RS-232; the displayed output comes from received bytes (the remote system must echo). The hardware configuration and handshake wiring need testing with TRS80GP and the PiDP-11/70.
+
+At run time:
+- **Enter** feeds the paper in local mode.
+- **Backspace** erases the preceding character on the active line.
+- **Ctrl-]** exits to DOS READY.
+
+## Paper and printhead
+
+After selecting a mode, no title or status line remains onscreen. Paper can use the **entire 64-column width and screen rows 0–14**, and a `^` printhead marker moves along row 15. Lines feed upward, finally scrolling off the top edge.
+
+In the native program, `LDIR` shifts the paper rapidly. Ordinary printed characters go directly into video memory.
+
+## BASIC versions
+
+The ROM BASIC prototype can use ordinary BASIC paper scrolling, or a 33-byte Z80 scroll helper if high memory is reserved:
+
+```text
+Cass?            [Enter]
 Memory Size? 61439
 ```
 
-This limits BASIC's available RAM to `EFFFh` and protects the machine-code routine installed at `F000h`. The program checks the BASIC memory limit and only installs the routine when it equals 61439. It then uses Z80 `LDIR` to move the 14 visible historical paper lines up and clear the active row. The routine preserves AF, BC, DE, and HL.
+The ROM BASIC version calls this helper through `USR(0)`. The separate TRSDOS Disk BASIC version uses `DEFUSR0` and `USR0(0)`; its current build requires the machine-code paper-feed helper. Do not mix the two BASIC source files.
 
-If you simply press Enter at `Memory Size?`, the program uses a pure BASIC `PEEK`/`POKE` scrolling fallback. Printing individual characters still remains unthrottled; however, **each Enter may be noticeably slower** in that fallback mode.
+The native `/CMD` version does not require a BASIC memory reservation.
 
-The ROM BASIC version calls `USR(0)`; the Disk BASIC version uses `DEFUSR0` and `USR0(0)`. Do not exchange these versions.
+## Planned improvements
 
-## Testing notes
+- Half-duplex and full-duplex configuration in the serial startup menu
+- More faithful Teletype paper and carriage behavior
+- Real-hardware RS-232 compatibility testing and reliable buffering
 
-v1.1 has been reviewed statically and committed, but **not yet run in TRS80GP or on the real Model III**. Please test in local mode, including a few Enters, and report any BASIC error or line number. If the emulated BASIC interpreter is still dropping rapid keystrokes, moving keyboard polling into machine code will be the next performance step.
+## Status
+
+**Experimental prototype.** The BASIC screen drawing was tested in TRS80GP, but the paper-feed performance and control-flow changes still require verification. The native `/CMD` build is also awaiting emulator testing.
 
 ## References
 
-- User-provided *TRSDOS & Disk BASIC Reference Manual*, sections 7-16 and 7-24–7-29 (`DEFUSR`, `USRn` and machine-code examples)
-- [TRS-80 RAM addresses and BASIC vectors](https://www.trs-80.com/main-internal-ram-addresses-and-routines.htm)
+- User-provided *TRSDOS & Disk BASIC Reference Manual* (especially its `DEFUSR` / `USRn` examples)
+- [TRS-80 Model III ports and I/O](https://www.trs-80.com/main-internal-ports-and-i-o.htm)
