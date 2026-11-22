@@ -39,6 +39,13 @@ After selecting a mode, no title or status line remains onscreen. Paper can use 
 
 In the native program, `LDIR` shifts the paper rapidly. Ordinary printed characters go directly into video memory.
 
+
+### Flashing cursor removed (native v1.1 / BASIC v1.3)
+
+The Model III's **ROM flashing cursor** is disabled after the startup menu by passing control code `0FH` to ROM display routine `0033H`. The native program restores the normal ROM cursor with `0EH` before returning to DOS READY. Both BASIC variants perform the same cursor control through `PRINT CHR$(15);` at startup and `PRINT CHR$(14);` on normal exit. This does **not** remove the Teletype's moving `^` printhead indicator.
+
+The native `TELETYPE.CMD` binary is rebuilt from the corresponding `TELETYPE.ASM` source, with a 701-byte file containing 685 Z80 bytes loaded at `7000H`. Assembly and simulated behaviour checks passed; the rebuilt version still needs a live TRS80GP test.
+
 ## BASIC versions
 
 The ROM BASIC prototype can use ordinary BASIC paper scrolling, or a 33-byte Z80 scroll helper if high memory is reserved:
