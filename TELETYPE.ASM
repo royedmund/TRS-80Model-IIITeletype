@@ -1,4 +1,4 @@
-; TELETYPE/CMD v1.5 - TRS-80 Model III native Z80 teletype
+; TELETYPE/CMD v1.6 - TRS-80 Model III native Z80 teletype
 ; TRSDOS/LDOS command file; 48K Model III, RS-232 option.
 ; Origin 7000h keeps clear of TRSDOS library command overlays.
 ; No BASIC or memory-size reservation required.
@@ -188,10 +188,10 @@ SERIAL_WAIT:
         OUT     (0EBH),A
         LD      A,(DUPLEX)
         OR      A
-        JP      Z,SERIAL_LOOP   ; full duplex: let remote echo keys
+        JP      Z,SERIAL_CRLF_CHECK  ; full duplex: remote echo
         LD      A,B
-        CALL    RECEIVE        ; half duplex: print our own keys
-        JP      SERIAL_LOOP
+        CALL    ECHO_PRESERVE_BC   ; half duplex: display locally
+        JP      SERIAL_CRLF_CHECK  ; CR must also transmit LF
 
 ; Incoming serial data: CRLF counts as one paper feed.
 RECEIVE:
@@ -356,7 +356,7 @@ LINECOUNT:  DEFB 0             ; printable chars since latest CR/LF
 PENDING_CR: DEFB 0
 PRINTPTR:   DEFW 3F80H
 HEADPTR:    DEFW 3FC0H
-MSG_TITLE:  DEFM "TRS-80 MODEL III TELETYPE/CMD V1.5"
+MSG_TITLE:  DEFM "TRS-80 MODEL III TELETYPE/CMD V1.6"
             DEFB 0
 MSG_MODE:   DEFM "SELECT OPERATING MODE"
             DEFB 0
@@ -406,5 +406,25 @@ TXREADY:
         AND     04H
         JP      NZ,QUIT
         JR      TXREADY
+
+; Enter on the TRS-80 transmits CR (0DH) followed by LF (0AH).
+; The first byte was transmitted by SERIAL_KEY. This sends LF only
+; for Enter, not for other keystrokes. Break exits even when blocked.
+SERIAL_CRLF_CHECK:
+        LD      A,B
+        CP      0DH
+        JP      NZ,SERIAL_LOOP
+        CALL    TXREADY
+        LD      A,0AH
+        OUT     (0EBH),A
+        JP      SERIAL_LOOP
+
+; RECEIVE and LDIR scrolling may destroy B, which still holds the
+; original key. Keep BC across half-duplex local echo for CRLF test.
+ECHO_PRESERVE_BC:
+        PUSH    BC
+        CALL    RECEIVE
+        POP     BC
+        RET
 
         END START
