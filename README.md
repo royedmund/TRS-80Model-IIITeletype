@@ -1,31 +1,49 @@
 # TRS-80 Model III Teletype Terminal
 
-A native Z80 RS-232 teletype terminal for the TRS-80 Model III, running LDOS 5.3.
+An experimental teletype terminal for a **TRS-80 Model III running LDOS 5.3**, intended eventually to connect to a PiDP-11/70 via RS-232 at **300 baud, 8 data bits, no parity, 1 stop bit (8N1)**.
 
-## Configuration
+## BASIC paper-and-printhead prototype
 
-- **Executable:** `TELETYPE/CMD` (repository file: `TELETYPE.CMD`)
-- **Serial:** 300 baud, 8 data bits, no parity, 1 stop bit (300 8N1)
-- **Terminal:** 64-column Model III display and keyboard
-- **Serial hardware:** Model III RS-232 card
-- **Use case:** Connect to a PiDP-11/70's USB-to-serial interface
+[TELETYPE.BAS](TELETYPE.BAS) is the first **visual-only** prototype. It uses the Model III's native 64 x 16 video display to simulate:
 
-From the LDOS Ready prompt run `TELETYPE`. Press **Ctrl-]** to exit to LDOS. The terminal expects remote echo, and displays incoming ASCII (LF ignored; CR processed). Display is limited to 7-bit ASCII, while outbound keyboard bytes are sent unmodified.
+- A teletype paper window with an advancing printhead
+- One character printed for each keypress
+- **Paper moving upward** with each line feed / ENTER
+- Automatic carriage return and line feed at the right margin
+- Backspace to erase the last character
+- Ctrl-] to exit
 
-## Wiring
+Run from LDOS Disk BASIC after saving the listing as `TELETYPE/BAS`:
 
-Use a correctly wired RS-232 null-modem cable, or a suitable level-shifting adapter for the Pi. The TRS-80 RS-232 port is *not* a TTL-level UART. Configure the Pi's attached serial interface to **300 8N1**, and ensure the required modem-control wiring or handshaking is present.
+```basic
+RUN "TELETYPE/BAS"
+```
 
-## Build
+The paper occupies rows 2-12; the last paper row is the active printing line. The small `^` beneath the paper marks the moving printhead. On Enter, the eleven-line paper buffer shifts up and the printhead returns to the left.
 
-The repository contains `TELETYPE.ASM` (human-readable Z80 assembly), `build.py` (reproducible byte builder) and a ready-to-load `TELETYPE.CMD` binary. Build using `python3 build.py`. The program loads and starts at **6000H**, and uses LDOS `@EXIT` at **402DH**.
+**Not implemented yet:** real RS-232 I/O, 300-baud timing and cassette-port mechanical strike sounds. The on-screen 300 8N1 label is a design target, not a working serial link.
+
+## Z80 source
+
+[TELETYPE.ASM](TELETYPE.ASM) is early, experimental assembly source for a separate terminal implementation. **No compiled `TELETYPE/CMD` binary has been published in this repository yet.** The assembly code has not been tested on the actual Model III hardware.
+
+## Planned improvements
+
+1. More lifelike paper feed and printhead animation, maintaining the 64 x 16 display limitations.
+2. Printhead impact and carriage-return effects using the cassette output, with safe port handling.
+3. Real 300 8N1 communications through the Model III RS-232 card to the PiDP-11/70.
+4. Tested LDOS `TELETYPE/CMD` executable and bootable disk distribution.
+
+## Hardware notes
+
+The Model III RS-232 signals use RS-232 electrical levels, not the Pi's TTL GPIO UART levels. Use a suitable USB-to-RS-232 adapter and cable wiring, with appropriate null-modem connections or handshaking as required.
 
 ## Status
 
-**Initial untested hardware build.** The CMD file structure and opcodes have been generated, but execution has not yet been tested on a TRS-80 Model III or with a PiDP-11/70. Serial wiring, terminal control characters, and keyboard handling should be verified on real hardware.
+**Prototype / not hardware-tested.** Please report any BASIC syntax, keyboard, or display issues observed under LDOS 5.3.
 
-## Reference
+## References
 
-- [TRS-80 port and I/O reference](https://www.trs-80.com/main-internal-ports-and-i-o.htm)
-- [TRS-80 CMD file format](https://www.trs-80.com/sub-tips-file-formats.htm)
-- [TRS-80 ROM keyboard and display routines](https://www.trs-80.com/sub-rom-io-and-misc-routines.htm)
+- [TRS-80 Model III specifications](https://www.trs-80.com/sub-models-model3.htm)
+- [TRS-80 graphics and character codes](https://www.trs-80.com/sub-tips-graphics.htm)
+- [LDOS Model III BASIC disassembly](https://www.trs-80.com/sub-disassem-dos-ldos-m3-basic-cmd.htm)
